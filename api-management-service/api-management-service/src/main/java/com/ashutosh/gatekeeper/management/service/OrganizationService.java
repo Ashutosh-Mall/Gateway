@@ -3,6 +3,7 @@ package com.ashutosh.gatekeeper.management.service;
 import com.ashutosh.gatekeeper.management.dto.requestDto.OrganizationRequest;
 import com.ashutosh.gatekeeper.management.dto.requestDto.OrganizationStatusRequest;
 import com.ashutosh.gatekeeper.management.dto.requestDto.TenantAdminRequest;
+import com.ashutosh.gatekeeper.management.dto.requestDto.TenantOrganizationRequest;
 import com.ashutosh.gatekeeper.management.dto.responseDto.OrganizationResponse;
 import com.ashutosh.gatekeeper.management.dto.responseDto.TenantAdminResponse;
 import com.ashutosh.gatekeeper.management.entity.ManagementUser;
@@ -29,15 +30,18 @@ public class OrganizationService {
     private final ManagementUserRepository managementUserRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TenantContext tenantContext;
 
     public OrganizationService(OrganizationRepository organizationRepository,
                                ManagementUserRepository managementUserRepository,
                                RoleRepository roleRepository,
-                               PasswordEncoder passwordEncoder) {
+                               PasswordEncoder passwordEncoder,
+                               TenantContext tenantContext) {
         this.organizationRepository = organizationRepository;
         this.managementUserRepository = managementUserRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.tenantContext = tenantContext;
     }
 
     @Transactional
@@ -187,6 +191,27 @@ public class OrganizationService {
 
 
 
+    @Transactional(readOnly = true)
+    public OrganizationResponse getOwnOrganization() {
+        return OrganizationResponse.from(tenantContext.getOrganization());
+    }
+
+    @Transactional
+    public OrganizationResponse updateOwnOrganization(TenantOrganizationRequest request) {
+        long startedAt = System.nanoTime();
+
+        Organization organization = tenantContext.getOrganization();
+
+        if(!organization.getName().equalsIgnoreCase(request.getName())
+                && organizationRepository.existsByNameIgnoreCase(request.getName())) {
+            throw new ApiException(HttpStatus.CONFLICT, "Organization name already exists");
+        }
+
+        organization.setName(request.getName());
+        organization.setUpdatedAt(LocalDateTime.now());
+
+        return OrganizationResponse.from(organization);
+    }
 
 
     private ManagementUser getTenantAdminEntity(Long organizationId) {
@@ -219,5 +244,6 @@ public class OrganizationService {
         return organizationRepository.findByIdAndStatusNot(id, OrganizationStatus.DELETED)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Organization not found"));
     }
+
 
 }
